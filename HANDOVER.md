@@ -1,6 +1,6 @@
 # Handover: UGV text-guided tracking (AI course project)
 
-Last updated: 2026-10-09 by Arsen
+Last updated: 2026-10-10 by Ivan (settle gating fix, keys)
 
 ## 1. What the project is
 
@@ -24,8 +24,8 @@ Full plan, scenarios S1-S6 and metrics: see the proposal PDF.
 |---|---|
 | Camera stream Pi -> laptop | done |
 | Gimbal control from Python | done |
-| V1 baseline on the robot | done, turns to the target and locks on it |
-| Search + approach mode | first version works; gimbal speed and turn-loss fixes added, needs tuning |
+| V1 baseline on the robot | done; oscillation on a stationary target fixed with settle gating (2026-10-10) |
+| Search + approach mode | first version works; gimbal speed, turn-loss and settle-gating fixes added; settle gating not yet tested on the robot |
 | Camera calibration | NOT done (needs printed 9x6 inner-corner checkerboard) |
 | Latency measurement | logging is in place, numbers not analysed yet |
 | Sequence recording (S1-S6) | not started (`--record` option is ready) |
@@ -123,7 +123,16 @@ python laptop_approach.py --robot 192.168.50.5 --prompt "a red backpack" --no-dr
 python laptop_approach.py --robot 192.168.50.5 --prompt "a red backpack"
 ```
 
-Keys: `q` quit, `c` re-center gimbal, SPACE (approach mode) = stop tracks / resume.
+Keys -- **click the video window first**; on macOS keys typed in the terminal never reach OpenCV:
+
+| Key | `laptop_v1.py` | `laptop_approach.py` |
+|---|---|---|
+| `q` / ESC | quit | stop tracks and quit |
+| `c` | re-center gimbal + pause tracking | stop tracks, re-center gimbal, HOLD (no tracking / search) |
+| SPACE | pause / resume tracking | pause / resume driving; leaves HOLD |
+| Ctrl+C (terminal) | quit | stop tracks and quit |
+
+`c` pauses on purpose: before, the next detection turned the gimbal straight back to the target, so `c` looked broken.
 
 Other tools:
 
@@ -133,11 +142,9 @@ python calibrate.py --robot 192.168.50.5 --cols 9 --rows 6 --square 0.025
 python laptop_v1.py --robot 192.168.50.5 --prompt "a red backpack" --no-control --record rec/S1_seq01
 ```
 
-Headless, time-limited test (for SSH / Claude Code):
-
-```
-python laptop_approach.py --robot 192.168.50.5 --prompt "a red backpack" --no-drive --headless --duration 20 --save-dir runs/test01
-```
+Headless, time-limited test (for SSH / Claude Code) -- NOT in the repo yet: `--headless`, `--duration` and
+`--save-dir` are not implemented in `laptop_approach.py`, and `snapshot.py` / `gimbal_test.py` are missing from
+the initial commit. Whoever has them, please push.
 
 ## 7. Files
 
@@ -167,6 +174,10 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 | `--turn-sign` | -1 if chassis turns away from target | ? |
 | `--drive-sign` | -1 if "forward" drives backward | ? |
 | `--gimbal-spd` / `--gimbal-acc` | gimbal speed on ESP32 (0 = fastest) | 50 / 10 default |
+| `--gain` | fraction of the angular error corrected per move | V1: 0.8, approach: 0.5 |
+| `--settle` | s to wait after a move is applied before trusting detections | 0.15 (lower values change nothing: the wait is dominated by command transit + next frame capture, ~65 ms/frame) |
+| `--settle-dps` | assumed gimbal speed; adds `|move| / this` to the settle time | V1: 200, approach: 100 (slower SPD/ACC), approach value not tuned |
+| `--no-settle` | old behaviour, correct on every detection (oscillates) | only for comparison |
 | `--yaw-comp` | gimbal counter-rotation while chassis turns | 1.0 default |
 | `--arrive-ratio` | stop when box height / image height >= this | 0.40 default |
 
@@ -176,6 +187,15 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 - SSH "connection refused" to 192.168.4.1: that is the ESP32 network (`UGV`). Connect to `AccessPopup`, use 192.168.50.5.
 - `laptop_v1.py` hangs with no window: Ultralytics checks internet on import. Fixed in code (`YOLO_OFFLINE=true`). If it fails at model loading, the model/CLIP wasn't downloaded -- run the `print('ok')` command on internet.
 - Scripts must run on the right machine: `robot_bridge.py` / `gimbal_test.py` on the Pi only.
+- **V1 camera swung back and forth on a stationary target (fixed 2026-10-10).** After a gimbal command it takes
+  ~0.4 s (~6 frames) before the image shows the move. V1 computed "angle at capture + error" on every frame,
+  so the same -24 deg error was added 6 times: pan went +35 -> -68 -> +93 ... (see `v1_log.csv`). Fix:
+  *settle gating* -- after a move, ignore detections until a frame is captured with that move already applied
+  (the frame header echoes the bridge's applied `pan_cmd`/`tilt_cmd`) plus `--settle` + `|move|/--settle-dps`.
+  Same logic in `laptop_approach.py` (uses an index of sent commands, because yaw feed-forward changes the
+  angle every frame; feed-forward keeps running while waiting). Log column `moving` = frame was gated.
+- **`pan_fb` / `tilt_fb` from the ESP32 are not usable as the real gimbal angle**: seen `pan_fb = -180` while
+  the command was -69. That is why the code uses the commanded angle + settle gating instead.
 - Approach mode: gimbal was too fast -> SPD/ACC limits + max step per update. Camera lost the target when the chassis turned -> yaw feed-forward (gimbal counter-rotates), gentler turning, local search around the last seen bearing. Still jerky -- the real fix is V2/V3.
 
 ## 10. Next steps (by owner, from the proposal)
