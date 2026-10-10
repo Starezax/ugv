@@ -174,10 +174,10 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 | `--turn-sign` | -1 if chassis turns away from target | ? |
 | `--drive-sign` | -1 if "forward" drives backward | ? |
 | `--gimbal-spd` / `--gimbal-acc` | gimbal speed on ESP32 (0 = fastest) | 0 / 0 (the old 50 / 10 was a workaround for the overshoot, not needed with settle gating) |
-| `--gain` | multiplier on the measured angular error per move | V1: 0.8, approach: 2.0 (tested 2026-10-10). Gain > 1 should overshoot in theory; most likely `--hfov 65` underestimates the real FOV, so errors are measured too small. Re-check after calibration, expect ~0.8-1.0 |
-| `--max-step` | max gimbal change per correction, deg (approach) | 60 (was 8: with settle gating, 8 deg per ~0.4 s capped tracking at ~20 deg/s) |
+| `--gain` | multiplier on the measured angular error per move | 0.8 for both. Approach also worked with 2.0 (2026-10-10); gain > 1 should overshoot in theory, so the uncalibrated `--hfov 65` probably underestimates the real FOV. Retune after calibration |
+| `--max-step` | max gimbal change per correction, deg (approach) | 100 (was 8: with settle gating, 8 deg per ~0.4 s capped tracking at ~20 deg/s; 60 also worked) |
 | `--settle` | s to wait after a move is applied before trusting detections | 0.15 (lower values change nothing: the wait is dominated by command transit + next frame capture, ~65 ms/frame) |
-| `--settle-dps` | assumed gimbal speed; adds `|move| / this` to the settle time | V1: 200, approach: 100 (tested) |
+| `--settle-dps` | assumed gimbal speed; adds `|move| / this` to the settle time | 200 for both (approach also worked with 100). Tracking speed is currently limited by the uncalibrated camera and the frame rate (~15 fps, ~0.4 s per correction cycle), not by these flags |
 | `--no-settle` | old behaviour, correct on every detection (oscillates) | only for comparison |
 | `--yaw-comp` | gimbal counter-rotation while chassis turns | 1.0 default |
 | `--arrive-ratio` | stop when box height / image height >= this | 0.40 default -- fine for a backpack; a standing person is already 0.5-0.6 at a few metres, so for people use ~0.8 or the robot never drives |
