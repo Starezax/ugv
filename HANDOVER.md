@@ -25,7 +25,7 @@ Full plan, scenarios S1-S6 and metrics: see the proposal PDF.
 | Camera stream Pi -> laptop | done |
 | Gimbal control from Python | done |
 | V1 baseline on the robot | done; oscillation on a stationary target fixed with settle gating (2026-10-10) |
-| Search + approach mode | first version works; gimbal speed, turn-loss and settle-gating fixes added; settle gating not yet tested on the robot |
+| Search + approach mode | first version works; settle gating + new gimbal defaults tested with `--no-drive` (gimbal only) 2026-10-10; driving not re-tested |
 | Camera calibration | NOT done (needs printed 9x6 inner-corner checkerboard) |
 | Latency measurement | logging is in place, numbers not analysed yet |
 | Sequence recording (S1-S6) | not started (`--record` option is ready) |
@@ -173,13 +173,14 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 | `--tilt-sign` | -1 if gimbal tilts away from target | ? |
 | `--turn-sign` | -1 if chassis turns away from target | ? |
 | `--drive-sign` | -1 if "forward" drives backward | ? |
-| `--gimbal-spd` / `--gimbal-acc` | gimbal speed on ESP32 (0 = fastest) | 50 / 10 default |
-| `--gain` | fraction of the angular error corrected per move | V1: 0.8, approach: 0.5 |
+| `--gimbal-spd` / `--gimbal-acc` | gimbal speed on ESP32 (0 = fastest) | 0 / 0 (the old 50 / 10 was a workaround for the overshoot, not needed with settle gating) |
+| `--gain` | multiplier on the measured angular error per move | V1: 0.8, approach: 2.0 (tested 2026-10-10). Gain > 1 should overshoot in theory; most likely `--hfov 65` underestimates the real FOV, so errors are measured too small. Re-check after calibration, expect ~0.8-1.0 |
+| `--max-step` | max gimbal change per correction, deg (approach) | 60 (was 8: with settle gating, 8 deg per ~0.4 s capped tracking at ~20 deg/s) |
 | `--settle` | s to wait after a move is applied before trusting detections | 0.15 (lower values change nothing: the wait is dominated by command transit + next frame capture, ~65 ms/frame) |
-| `--settle-dps` | assumed gimbal speed; adds `|move| / this` to the settle time | V1: 200, approach: 100 (slower SPD/ACC), approach value not tuned |
+| `--settle-dps` | assumed gimbal speed; adds `|move| / this` to the settle time | V1: 200, approach: 100 (tested) |
 | `--no-settle` | old behaviour, correct on every detection (oscillates) | only for comparison |
 | `--yaw-comp` | gimbal counter-rotation while chassis turns | 1.0 default |
-| `--arrive-ratio` | stop when box height / image height >= this | 0.40 default |
+| `--arrive-ratio` | stop when box height / image height >= this | 0.40 default -- fine for a backpack; a standing person is already 0.5-0.6 at a few metres, so for people use ~0.8 or the robot never drives |
 
 ## 9. Problems we hit and fixes
 
