@@ -26,7 +26,7 @@ Full plan, scenarios S1-S6 and metrics: see the proposal PDF.
 | Gimbal control from Python | done |
 | V1 baseline on the robot | done; oscillation on a stationary target fixed with settle gating (2026-10-10) |
 | Search + approach mode | first version works; settle gating + new gimbal defaults tested with `--no-drive` (gimbal only) 2026-10-10; driving not re-tested |
-| Camera calibration | NOT done (needs printed 9x6 inner-corner checkerboard) |
+| Camera calibration | done 2026-10-11, `calib.npz` in the repo (fx ~270 px, HFOV ~100 deg, RMS 2.0 px), see section 9 |
 | Latency measurement | logging is in place, numbers not analysed yet |
 | Sequence recording (S1-S6) | not started (`--record` option is ready) |
 | Jetson availability | not confirmed (ask UGV club) |
@@ -174,7 +174,7 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 | `--turn-sign` | -1 if chassis turns away from target | ? |
 | `--drive-sign` | -1 if "forward" drives backward | ? |
 | `--gimbal-spd` / `--gimbal-acc` | gimbal speed on ESP32 (0 = fastest) | 0 / 0 (the old 50 / 10 was a workaround for the overshoot, not needed with settle gating) |
-| `--gain` | multiplier on the measured angular error per move | 0.8 for both. Approach also worked with 2.0 (2026-10-10); gain > 1 should overshoot in theory, so the uncalibrated `--hfov 65` probably underestimates the real FOV. Retune after calibration |
+| `--gain` | multiplier on the measured angular error per move | 0.8 for both, now with calibration. (Gain 2.0 worked before calibration because the assumed 65 deg FOV made every error ~1.85x too small -- see section 9) |
 | `--max-step` | max gimbal change per correction, deg (approach) | 100 (was 8: with settle gating, 8 deg per ~0.4 s capped tracking at ~20 deg/s; 60 also worked) |
 | `--settle` | s to wait after a move is applied before trusting detections | 0.15 (lower values change nothing: the wait is dominated by command transit + next frame capture, ~65 ms/frame) |
 | `--settle-dps` | assumed gimbal speed; adds `|move| / this` to the settle time | 200 for both (approach also worked with 100). Tracking speed is currently limited by the uncalibrated camera and the frame rate (~15 fps, ~0.4 s per correction cycle), not by these flags |
@@ -195,6 +195,14 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
   (the frame header echoes the bridge's applied `pan_cmd`/`tilt_cmd`) plus `--settle` + `|move|/--settle-dps`.
   Same logic in `laptop_approach.py` (uses an index of sent commands, because yaw feed-forward changes the
   angle every frame; feed-forward keeps running while waiting). Log column `moving` = frame was gated.
+- **Camera calibration (2026-10-11).** Two runs agree: fx = 267-273 px, fy = 264-274 px, cx ~ 331-338, cy ~ 241-243,
+  horizontal FOV ~ 100 deg (not 65 deg as assumed before), strong barrel distortion (k1 ~ -0.21).
+  - The old 65 deg guess means fx ~ 500, so error angles were ~1.85x too small -- that is why gain 2 "worked".
+  - RMS is 2.0 px, not < 0.5 px. Accepted: 2 px at fx ~ 270 is ~0.4 deg, below the tracking deadband (1-1.5 deg).
+    Likely causes if someone wants it lower: motion blur from the hand-held board, 640x480 JPEG stream,
+    default 5-coefficient model on a 100 deg lens (try `cv2.CALIB_RATIONAL_MODEL`).
+  - Both laptop scripts now undistort the box center (`cv2.undistortPoints`) before computing the angle.
+    At the image edge this matters: true angle ~60 deg vs 48 deg pinhole-only (and 32 deg with the old guess).
 - **`pan_fb` / `tilt_fb` from the ESP32 are not usable as the real gimbal angle**: seen `pan_fb = -180` while
   the command was -69. That is why the code uses the commanded angle + settle gating instead.
 - Approach mode: gimbal was too fast -> SPD/ACC limits + max step per update. Camera lost the target when the chassis turned -> yaw feed-forward (gimbal counter-rotates), gentler turning, local search around the last seen bearing. Still jerky -- the real fix is V2/V3.
