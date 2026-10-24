@@ -214,8 +214,8 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 | `--trk-frames-close`, `--close-ratio` | tracker budget when the target is close (box >= this share of the image height) | 25 / 0.18 (run07: below ~1 m the detector hardly fires) |
 | `--max-turn` | max track speed difference for turning | 0.035 (was 0.06: with ~1 frame/s it over-turned) |
 | `--attr-check` (+ `--attr-conf`) | experimental: detect the noun, keep crops CLIP finds closer to the full prompt than to the noun | off (removes the target for "a dark box", see section 9) |
-| `--no-tiles` | no zoomed tiles in SEARCH (tiles cost ~7x per frame) | off |
-| `--roi-px` | zoomed crop around the target while it is lower than this, px | 60 |
+| `--no-tiles` | no zoomed tiles in SEARCH / while stopped after a miss (tiles cost ~7x per frame) | off |
+| `--roi-px` | zoomed crop around the target while its box is lower than this, px | 130 (was 60; run08: the pouf was found almost only with zoom) |
 | `--settle` | s to wait after a move is applied before trusting detections | 0.15 (lower values change nothing: the wait is dominated by command transit + next frame capture, ~65 ms/frame) |
 | `--settle-dps` | assumed gimbal speed; adds `|move| / this` to the settle time | 200 for both (approach also worked with 100). Tracking speed is currently limited by the uncalibrated camera and the frame rate (~15 fps, ~0.4 s per correction cycle), not by these flags |
 | `--no-settle` | old behaviour, correct on every detection (oscillates) | only for comparison |
