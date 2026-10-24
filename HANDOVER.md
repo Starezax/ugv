@@ -1,6 +1,7 @@
 # Handover: UGV text-guided tracking (AI course project)
 
-Last updated: 2026-10-24 by Zakhar (29/30 sequences recorded, `record.py` + `run_seq.sh`)
+Last updated: 2026-10-24 by Zakhar (29/30 sequences recorded, `record.py` + `run_seq.sh`); 2026-10-24 midterm fixes
+(camera-jump fix, zoom for far objects, quick GT + metrics in `eval/`)
 
 ## 1. What the project is
 
@@ -25,10 +26,10 @@ Full plan, scenarios S1-S6 and metrics: see the proposal PDF.
 | Camera stream Pi -> laptop | done |
 | Gimbal control from Python | done |
 | V1 baseline on the robot | done; oscillation on a stationary target fixed with settle gating (2026-10-10) |
-| Search + approach mode | first version works; settle gating + new gimbal defaults tested with `--no-drive` (gimbal only) 2026-10-10; driving not re-tested |
+| Search + approach mode | first version works; 2026-10-24: camera-jump bug fixed, zoom tiles/ROI for far objects; only replay-tested -- **needs robot runs** (`--no-drive` first) |
 | Camera calibration | done 2026-10-11, `calib.npz` in the repo (fx ~270 px, HFOV ~100 deg, RMS 2.0 px), see section 9 |
-| Latency measurement | logging is in place, numbers not analysed yet |
-| Sequence recording (S1-S6) | 29/30 done 2026-10-18, only `S6_seq05` missing -- see section 6 |
+| Latency measurement | detector 102 ms/frame median on the laptop CPU (`eval/`); Pi end-to-end log still not analysed |
+| Sequence recording (S1-S6) | 29/30 done 2026-10-18, only `S6_seq05` missing -- see section 6; quick GT on 308 frames in `eval/gt.json` |
 | Jetson availability | not confirmed (ask UGV club) |
 | V2 / V3 / V4 | not started |
 
@@ -164,9 +165,10 @@ python snapshot.py --robot 192.168.50.5 --out view.jpg --prompt "a red backpack"
 python calibrate.py --robot 192.168.50.5 --cols 9 --rows 6 --square 0.025
 ```
 
-Headless, time-limited test (for SSH / Claude Code) -- NOT in the repo yet: `--headless`, `--duration` and
-`--save-dir` are not implemented in `laptop_approach.py`, and `snapshot.py` / `gimbal_test.py` are missing from
-the initial commit. Whoever has them, please push.
+Headless, time-limited test: `laptop_approach.py --headless --duration 20`. Without the robot, stream a recording
+with `replay_bridge.py --seq rec/S1_seq04 --loop` and point the laptop script at `--robot 127.0.0.1` (the image
+does not react to commands, so this checks that everything runs, not the control). `snapshot.py`,
+`gimbal_test.py` are still missing from git -- whoever has them, please push.
 
 ## 7. Files
 
@@ -177,7 +179,10 @@ the initial commit. Whoever has them, please push.
 | `laptop_v1.py` | laptop | V1 baseline (gimbal only) |
 | `record.py` | laptop | records every frame + capture time + gimbal angles to `rec/<name>/` |
 | `run_seq.sh` | laptop | V1 + `record.py` in one command, for the S1-S6 sequences |
-| `laptop_approach.py` | laptop | search + gimbal + chassis approach, headless options |
+| `laptop_approach.py` | laptop | search + gimbal + chassis approach, `--headless --duration` |
+| `detector.py` | laptop | YOLO-World text detector + zoom tiles (search) / ROI (far target), optional CLIP attribute check |
+| `replay_bridge.py` | laptop | fake bridge streaming a recording, for tests without the robot |
+| `eval/` | laptop | quick ground truth, detector benchmark, metrics, object-size study (`eval/README.md`) |
 | `calibrate.py` | laptop | checkerboard calibration -> `calib.npz` (loaded automatically) |
 | `snapshot.py` | laptop | save one frame (optionally with detections) |
 | `CLAUDE.md` | -- | context and safety rules for Claude Code |
@@ -199,12 +204,19 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 | `--drive-sign` | -1 if "forward" drives backward | ? |
 | `--gimbal-spd` / `--gimbal-acc` | gimbal speed on ESP32 (0 = fastest) | 0 / 0 (the old 50 / 10 was a workaround for the overshoot, not needed with settle gating) |
 | `--gain` | multiplier on the measured angular error per move | 0.8 for both, now with calibration. (Gain 2.0 worked before calibration because the assumed 65 deg FOV made every error ~1.85x too small -- see section 9) |
-| `--max-step` | max gimbal change per correction, deg (approach) | 100 (was 8: with settle gating, 8 deg per ~0.4 s capped tracking at ~20 deg/s; 60 also worked) |
+| `--max-step` | max gimbal change per correction, deg (approach) | 35 since 2026-10-24 (100 let one bad bearing swing the camera 55 deg; 8 capped tracking at ~20 deg/s) |
+| `--miss-grace` | s; detection gaps shorter than this are ignored (no LOST) | 0.35 |
+| `--attr-check` (+ `--attr-conf`) | experimental: detect the noun, keep crops CLIP finds closer to the full prompt than to the noun | off (removes the target for "a dark box", see section 9) |
+| `--no-tiles` | no zoomed tiles in SEARCH (tiles cost ~7x per frame) | off |
+| `--roi-px` | zoomed crop around the target while it is lower than this, px | 60 |
 | `--settle` | s to wait after a move is applied before trusting detections | 0.15 (lower values change nothing: the wait is dominated by command transit + next frame capture, ~65 ms/frame) |
 | `--settle-dps` | assumed gimbal speed; adds `|move| / this` to the settle time | 200 for both (approach also worked with 100). Tracking speed is currently limited by the uncalibrated camera and the frame rate (~15 fps, ~0.4 s per correction cycle), not by these flags |
 | `--no-settle` | old behaviour, correct on every detection (oscillates) | only for comparison |
 | `--yaw-comp` | gimbal counter-rotation while chassis turns | 1.0 default |
-| `--arrive-ratio` | stop when box height / image height >= this | 0.40 default -- fine for a backpack; a standing person is already 0.5-0.6 at a few metres, so for people use ~0.8 or the robot never drives |
+| `--arrive-dist` | stop when the object's base on the floor is this close to the camera, m | 0.45 (2026-10-24; before, the 0.40 box-ratio rule stopped ~1.2 m from a chair) |
+| `--cam-height` | camera lens height above the floor, m -- **measure it**, the distance scales with it | 0.25 (guess!). The S1-S6 recordings were made with the robot on a desk (~1.0 m) |
+| `--slow-dist` | slow down over this distance before the stop point, m | 1.0 |
+| `--arrive-ratio` | safety stop: box height / image height >= this (objects not on the floor, e.g. on a table) | 0.85 |
 
 ## 9. Problems we hit and fixes
 
@@ -229,6 +241,18 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
     At the image edge this matters: true angle ~60 deg vs 48 deg pinhole-only (and 32 deg with the old guess).
 - **`pan_fb` / `tilt_fb` from the ESP32 are not usable as the real gimbal angle**: seen `pan_fb = -180` while
   the command was -69. That is why the code uses the commanded angle + settle gating instead.
+- **Approach mode camera jumps (fixed 2026-10-24).** The bridge echoes the new `pan_cmd` as soon as it forwards a
+  command, but the servo takes ~0.4 s. Frames in between show the old view labelled with the new angle, so
+  `pan_cmd + error` counts the error twice. The correction was gated, but `last_pan_seen` and the chassis bearing
+  were still updated from those frames, and one missed detection (LOST) sent the gimbal there at full speed
+  (`approach_log.csv`: -96 -> -151 deg, 14 jumps > 20 deg in 40 s). Now: bearing only from settled frames, short gaps
+  ignored (`--miss-grace`), LOST holds the gimbal, max step 35 deg, nearest-box association.
+- **YOLO-World ignores attribute words (2026-10-24).** "a yellow chair" boxes the red chair and the beige armchair;
+  it acts as a "chair" detector. Tried: detect the noun, keep crops that CLIP finds closer to the full prompt than
+  to the bare noun (`--attr-check`). Separates yellow from red chairs, but for "a dark box" it drops the real box
+  (82% missed, the distractors are dark too). Not general -> off by default; distractors are V4's job (template).
+- **Detector "sees" the target when it is not there.** With "a dark box" at conf 0.10, 76% of frames without the
+  target still have a box (black devices, monitors) -> wrong lock in S4. Motivation for V4 (identity check).
 - Approach mode: gimbal was too fast -> SPD/ACC limits + max step per update. Camera lost the target when the chassis turned -> yaw feed-forward (gimbal counter-rotates), gentler turning, local search around the last seen bearing. Still jerky -- the real fix is V2/V3.
 
 ## 10. Next steps (by owner, from the proposal)
