@@ -213,6 +213,7 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 | `--colour-min`, `--no-colour-check` | first lock: min CLIP probability of the prompt's hue (red, blue, yellow, ...; not black/white/dark), among the prompt in 11 colours | 0.15 |
 | `--confirm-frames`, `--confirm-window` | first lock: the candidate must pass in this many of that many frames, robot standing still (state CONFIRM, orange box) | 3 / 6 |
 | `--lock-conf` | once locked, weaker detections (down to this) next to the last box also count; boxes elsewhere are ignored (no switching to another object) | 0.05 |
+| `--recheck-every`, `--recheck-min`, `--recheck-fails` | while tracking a hue prompt: re-check the colour every N frames; min probability; drop the lock after this many failures in a row | 5 / 0.08 / 3 |
 | `--trk-frames`, `--trk-score` | template tracker (`tracker.py`) bridges at most this many frames after the last real detection; min match score | 5 / 0.6 (0 = off) |
 | `--trk-frames-close`, `--close-ratio` | tracker budget when the target is close (box >= this share of the image height) | 25 / 0.18 (run07: below ~1 m the detector hardly fires) |
 | `--max-turn` | max track speed difference for turning | 0.035 (was 0.06: with ~1 frame/s it over-turned) |
@@ -270,6 +271,10 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
   as tracking (one frame, score 0.10) and YOLO-World ignores colour words. Now: strict first lock (score 0.15, CLIP
   hue check, 3 of 6 frames standing still), relaxed tracking that ignores boxes away from the target. Checked on the
   lab2 chairs: "a blue chair" rejects all (<= 0.03), "a red chair" accepts only red ones (0.80-0.93).
+- **Lock moved to another object while tracking (run11, ~39 s).** A box 5x smaller than the chair, ~150 px away, was
+  'near' (centre within 200 px) -> new reference -> white box -> later the pouf. Now 'same object' = overlap, or close
+  relative to the box size and similar size (weak boxes must overlap), using the box position predicted from the
+  gimbal motion; plus a colour re-check every 5 frames while tracking.
 - **YOLO-World ignores attribute words (2026-10-24).** "a yellow chair" boxes the red chair and the beige armchair;
   it acts as a "chair" detector. Tried: detect the noun, keep crops that CLIP finds closer to the full prompt than
   to the bare noun (`--attr-check`). Separates yellow from red chairs, but for "a dark box" it drops the real box
