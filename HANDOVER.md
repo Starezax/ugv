@@ -205,7 +205,10 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 | `--gimbal-spd` / `--gimbal-acc` | gimbal speed on ESP32 (0 = fastest) | 0 / 0 (the old 50 / 10 was a workaround for the overshoot, not needed with settle gating) |
 | `--gain` | multiplier on the measured angular error per move | 0.8 for both, now with calibration. (Gain 2.0 worked before calibration because the assumed 65 deg FOV made every error ~1.85x too small -- see section 9) |
 | `--max-step` | max gimbal change per correction, deg (approach) | 35 since 2026-10-24 (100 let one bad bearing swing the camera 55 deg; 8 capped tracking at ~20 deg/s) |
-| `--miss-grace` | s; detection gaps shorter than this are ignored (no LOST) | 0.35 |
+| `--miss-frames` / `--lost-frames` | missed detector frames ignored / held still (LOST) before searching again; frames, not seconds (a tiles frame takes 0.7 s) | 3 / 6 |
+| `--local-offsets`, `--local-rounds` | search positions around the area where the target was last seen, and how often to repeat them before a full sweep | 0,-20,20,-40,40 / 2 |
+| `--sweep`, `--look-frames`, `--sweep-dwell` | full sweep positions (snake order); sharp frames to check at each position; max s per position | -90..90 step 30 / 2 / 4.0 |
+| `--spin-speed`, `--spin-time` | chassis turn after a failed full sweep | 0.05 / 1.2 s |
 | `--attr-check` (+ `--attr-conf`) | experimental: detect the noun, keep crops CLIP finds closer to the full prompt than to the noun | off (removes the target for "a dark box", see section 9) |
 | `--no-tiles` | no zoomed tiles in SEARCH (tiles cost ~7x per frame) | off |
 | `--roi-px` | zoomed crop around the target while it is lower than this, px | 60 |
@@ -246,7 +249,11 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
   `pan_cmd + error` counts the error twice. The correction was gated, but `last_pan_seen` and the chassis bearing
   were still updated from those frames, and one missed detection (LOST) sent the gimbal there at full speed
   (`approach_log.csv`: -96 -> -151 deg, 14 jumps > 20 deg in 40 s). Now: bearing only from settled frames, short gaps
-  ignored (`--miss-grace`), LOST holds the gimbal, max step 35 deg, nearest-box association.
+  ignored, LOST holds the gimbal, max step 35 deg, nearest-box association.
+- **"Finds it but keeps rotating" (robot test 2026-10-24, `runs/gimba_dist.csv`).** Found in a frame taken mid-sweep
+  -> direction not updated -> local search restarted at the old angle (57 deg) while the box was at 32 deg, three
+  times in a row. Also 0.35 s / 1.0 s timeouts were shorter than one 0.7 s tiles frame, so one miss = LOST.
+  Fixed: remembered search area (`area_pan`), timeouts in frames, slower stop-and-look sweep.
 - **YOLO-World ignores attribute words (2026-10-24).** "a yellow chair" boxes the red chair and the beige armchair;
   it acts as a "chair" detector. Tried: detect the noun, keep crops that CLIP finds closer to the full prompt than
   to the bare noun (`--attr-check`). Separates yellow from red chairs, but for "a dark box" it drops the real box
