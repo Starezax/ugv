@@ -211,6 +211,7 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 | `--spin-speed`, `--spin-time` | chassis turn after a failed full sweep | 0.05 / 1.2 s |
 | `--lock-conf` | once locked, weaker detections (down to this) next to the last box also count | 0.05 |
 | `--trk-frames`, `--trk-score` | template tracker (`tracker.py`) bridges at most this many frames after the last real detection; min match score | 5 / 0.6 (0 = off) |
+| `--trk-frames-close`, `--close-ratio` | tracker budget when the target is close (box >= this share of the image height) | 25 / 0.18 (run07: below ~1 m the detector hardly fires) |
 | `--max-turn` | max track speed difference for turning | 0.035 (was 0.06: with ~1 frame/s it over-turned) |
 | `--attr-check` (+ `--attr-conf`) | experimental: detect the noun, keep crops CLIP finds closer to the full prompt than to the noun | off (removes the target for "a dark box", see section 9) |
 | `--no-tiles` | no zoomed tiles in SEARCH (tiles cost ~7x per frame) | off |
