@@ -209,6 +209,9 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 | `--local-offsets`, `--local-rounds` | search positions around the area where the target was last seen, and how often to repeat them before a full sweep | 0,-20,20,-40,40 / 2 |
 | `--sweep`, `--look-frames`, `--sweep-dwell` | full sweep positions (snake order); sharp frames to check at each position; max s per position | -90..90 step 30 / 2 / 4.0 |
 | `--spin-speed`, `--spin-time` | chassis turn after a failed full sweep | 0.05 / 1.2 s |
+| `--lock-conf` | once locked, weaker detections (down to this) next to the last box also count | 0.05 |
+| `--trk-frames`, `--trk-score` | template tracker (`tracker.py`) bridges at most this many frames after the last real detection; min match score | 5 / 0.6 (0 = off) |
+| `--max-turn` | max track speed difference for turning | 0.035 (was 0.06: with ~1 frame/s it over-turned) |
 | `--attr-check` (+ `--attr-conf`) | experimental: detect the noun, keep crops CLIP finds closer to the full prompt than to the noun | off (removes the target for "a dark box", see section 9) |
 | `--no-tiles` | no zoomed tiles in SEARCH (tiles cost ~7x per frame) | off |
 | `--roi-px` | zoomed crop around the target while it is lower than this, px | 60 |
@@ -254,6 +257,11 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
   -> direction not updated -> local search restarted at the old angle (57 deg) while the box was at 32 deg, three
   times in a row. Also 0.35 s / 1.0 s timeouts were shorter than one 0.7 s tiles frame, so one miss = LOST.
   Fixed: remembered search area (`area_pan`), timeouts in frames, slower stop-and-look sweep.
+- **Lost the target up close (robot runs 2026-10-24, `runs/run05-06.csv`, red pouf).** Runs 1-3 arrived (stopped at
+  0.44 / 0.43 / 0.45 m for 0.45 m). In 5-6 the detector found the pouf in only ~47% of tracking frames (score around
+  0.10); on each miss the code switched to tiles (~1 frame/s) and kept turning with the last command -> the body
+  over-turned (camera swung -125 -> +32 deg) and lost it. Fixed: lock-on hysteresis (`--lock-conf`), template
+  tracker for up to 5 missed frames, body stops on a miss, tiles only in SEARCH, slower turning.
 - **YOLO-World ignores attribute words (2026-10-24).** "a yellow chair" boxes the red chair and the beige armchair;
   it acts as a "chair" detector. Tried: detect the noun, keep crops that CLIP finds closer to the full prompt than
   to the bare noun (`--attr-check`). Separates yellow from red chairs, but for "a dark box" it drops the real box
