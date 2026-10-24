@@ -213,7 +213,10 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 | `--settle-dps` | assumed gimbal speed; adds `|move| / this` to the settle time | 200 for both (approach also worked with 100). Tracking speed is currently limited by the uncalibrated camera and the frame rate (~15 fps, ~0.4 s per correction cycle), not by these flags |
 | `--no-settle` | old behaviour, correct on every detection (oscillates) | only for comparison |
 | `--yaw-comp` | gimbal counter-rotation while chassis turns | 1.0 default |
-| `--arrive-ratio` | stop when box height / image height >= this | 0.40 default -- fine for a backpack; a standing person is already 0.5-0.6 at a few metres, so for people use ~0.8 or the robot never drives |
+| `--arrive-dist` | stop when the object's base on the floor is this close to the camera, m | 0.45 (2026-10-24; before, the 0.40 box-ratio rule stopped ~1.2 m from a chair) |
+| `--cam-height` | camera lens height above the floor, m -- **measure it**, the distance scales with it | 0.25 (guess!). The S1-S6 recordings were made with the robot on a desk (~1.0 m) |
+| `--slow-dist` | slow down over this distance before the stop point, m | 1.0 |
+| `--arrive-ratio` | safety stop: box height / image height >= this (objects not on the floor, e.g. on a table) | 0.85 |
 
 ## 9. Problems we hit and fixes
 
