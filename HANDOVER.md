@@ -1,6 +1,6 @@
 # Handover: UGV text-guided tracking (AI course project)
 
-Last updated: 2026-10-10 by Ivan (settle gating fix, keys)
+Last updated: 2026-10-24 by Zakhar (29/30 sequences recorded, `record.py` + `run_seq.sh`)
 
 ## 1. What the project is
 
@@ -28,7 +28,7 @@ Full plan, scenarios S1-S6 and metrics: see the proposal PDF.
 | Search + approach mode | first version works; settle gating + new gimbal defaults tested with `--no-drive` (gimbal only) 2026-10-10; driving not re-tested |
 | Camera calibration | done 2026-10-11, `calib.npz` in the repo (fx ~270 px, HFOV ~100 deg, RMS 2.0 px), see section 9 |
 | Latency measurement | logging is in place, numbers not analysed yet |
-| Sequence recording (S1-S6) | not started (`--record` option is ready) |
+| Sequence recording (S1-S6) | 29/30 done 2026-10-18, only `S6_seq05` missing -- see section 6 |
 | Jetson availability | not confirmed (ask UGV club) |
 | V2 / V3 / V4 | not started |
 
@@ -134,12 +134,34 @@ Keys -- **click the video window first**; on macOS keys typed in the terminal ne
 
 `c` pauses on purpose: before, the next detection turned the gimbal straight back to the target, so `c` looked broken.
 
+### Recording evaluation sequences
+
+One command per sequence: starts V1 tracking, waits for the model, records 20 s of every camera frame, stops V1.
+
+```
+./run_seq.sh S6_seq05 lab2                              # prompt "a dark box", 20 s
+PROMPT="a red backpack" DURATION=30 ./run_seq.sh S1_seq07 lab3
+```
+
+Output: `rec/<name>/` (frames + `frames.csv` + `meta.json`) and `logs/<name>_v1.csv`. To redo a take:
+`rm -r rec/<name> logs/<name>_v1.csv`. `record.py` alone records without tracking.
+
+Recorded so far (prompt `a dark box`, 20 s each, ~15 fps):
+
+| Scene | Robot position | Split | Sequences |
+|---|---|---|---|
+| `lab1` | facing the blue board | validation | S1_seq02-03, S2-S6 seq01-02 |
+| `lab2` | turned to the opposite side (red chair) | test | S1_seq04-06, S2-S5 seq03-05, S6_seq03-04 |
+
+**Still to record:** `./run_seq.sh S6_seq05 lab2` (robot facing the lab2 side, lights dimmed).
+`S1_seq01` is an old test take and is not part of the dataset. The recordings (~400 MB) are not in git;
+Zakhar has them.
+
 Other tools:
 
 ```
 python snapshot.py --robot 192.168.50.5 --out view.jpg --prompt "a red backpack"
 python calibrate.py --robot 192.168.50.5 --cols 9 --rows 6 --square 0.025
-python laptop_v1.py --robot 192.168.50.5 --prompt "a red backpack" --no-control --record rec/S1_seq01
 ```
 
 Headless, time-limited test (for SSH / Claude Code) -- NOT in the repo yet: `--headless`, `--duration` and
@@ -152,7 +174,9 @@ the initial commit. Whoever has them, please push.
 |---|---|---|
 | `robot_bridge.py` | Pi | camera stream, command forwarding, latency log, drive speed cap + stop watchdog |
 | `gimbal_test.py` | Pi | checks UART, gimbal directions, angle feedback |
-| `laptop_v1.py` | laptop | V1 baseline (gimbal only), `--record` for sequences |
+| `laptop_v1.py` | laptop | V1 baseline (gimbal only) |
+| `record.py` | laptop | records every frame + capture time + gimbal angles to `rec/<name>/` |
+| `run_seq.sh` | laptop | V1 + `record.py` in one command, for the S1-S6 sequences |
 | `laptop_approach.py` | laptop | search + gimbal + chassis approach, headless options |
 | `calibrate.py` | laptop | checkerboard calibration -> `calib.npz` (loaded automatically) |
 | `snapshot.py` | laptop | save one frame (optionally with detections) |
@@ -220,7 +244,7 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 2. V4: store a template crop at first lock; on re-acquisition score candidates by CLIP similarity to text + template; tune threshold on validation sequences.
 
 **Zakhar** -- data, evaluation, deployment
-1. Record ~30 sequences of 10-30 s covering S1-S6 (`--record rec/<scenario>_seqNN`).
+1. ~~Record ~30 sequences of 10-30 s covering S1-S6~~ -- 29/30 done, `S6_seq05` left (section 6).
 2. Annotate in CVAT (every 5th frame + interpolation), split validation/test by scene.
 3. Evaluation harness: replay recordings with throttled detector rate (1, 2, 5, 10 fps), compute center error, IoU, time in frame, recovery time, wrong-lock rate.
 4. Run the pipeline on the Pi itself (`--robot 127.0.0.1`) and on a Jetson if the club has one.
