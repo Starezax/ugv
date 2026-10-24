@@ -209,7 +209,10 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
 | `--local-offsets`, `--local-rounds` | search positions around the area where the target was last seen, and how often to repeat them before a full sweep | 0,-20,20,-40,40 / 2 |
 | `--sweep`, `--look-frames`, `--sweep-dwell` | full sweep positions (snake order); sharp frames to check at each position; max s per position | -90..90 step 30 / 2 / 4.0 |
 | `--spin-speed`, `--spin-time` | chassis turn after a failed full sweep | 0.05 / 1.2 s |
-| `--lock-conf` | once locked, weaker detections (down to this) next to the last box also count | 0.05 |
+| `--acquire-conf` | first lock / re-acquisition: detector score needed | 0.15 (tracking afterwards: 0.05 next to the target) |
+| `--colour-min`, `--no-colour-check` | first lock: min CLIP probability of the prompt's hue (red, blue, yellow, ...; not black/white/dark), among the prompt in 11 colours | 0.15 |
+| `--confirm-frames`, `--confirm-window` | first lock: the candidate must pass in this many of that many frames, robot standing still (state CONFIRM, orange box) | 3 / 6 |
+| `--lock-conf` | once locked, weaker detections (down to this) next to the last box also count; boxes elsewhere are ignored (no switching to another object) | 0.05 |
 | `--trk-frames`, `--trk-score` | template tracker (`tracker.py`) bridges at most this many frames after the last real detection; min match score | 5 / 0.6 (0 = off) |
 | `--trk-frames-close`, `--close-ratio` | tracker budget when the target is close (box >= this share of the image height) | 25 / 0.18 (run07: below ~1 m the detector hardly fires) |
 | `--max-turn` | max track speed difference for turning | 0.035 (was 0.06: with ~1 frame/s it over-turned) |
@@ -263,6 +266,10 @@ scp ws@192.168.50.5:~/latency_log.csv ~/Desktop/ugv/
   0.10); on each miss the code switched to tiles (~1 frame/s) and kept turning with the last command -> the body
   over-turned (camera swung -125 -> +32 deg) and lost it. Fixed: lock-on hysteresis (`--lock-conf`), template
   tracker for up to 5 missed frames, body stops on a miss, tiles only in SEARCH, slower turning.
+- **Locked onto the wrong object (run_10: "a blue chair" -> the red pouf, ARRIVED in 1.5 s).** First lock was as loose
+  as tracking (one frame, score 0.10) and YOLO-World ignores colour words. Now: strict first lock (score 0.15, CLIP
+  hue check, 3 of 6 frames standing still), relaxed tracking that ignores boxes away from the target. Checked on the
+  lab2 chairs: "a blue chair" rejects all (<= 0.03), "a red chair" accepts only red ones (0.80-0.93).
 - **YOLO-World ignores attribute words (2026-10-24).** "a yellow chair" boxes the red chair and the beige armchair;
   it acts as a "chair" detector. Tried: detect the noun, keep crops that CLIP finds closer to the full prompt than
   to the bare noun (`--attr-check`). Separates yellow from red chairs, but for "a dark box" it drops the real box
